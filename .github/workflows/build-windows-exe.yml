@@ -24,7 +24,7 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install -r requirements.txt
-          pip install pyinstaller waitress pywebview pythonnet pywin32 comtypes
+          pip install pyinstaller waitress
 
       - name: Download portable JRE (Eclipse Temurin 21)
         shell: pwsh
@@ -64,7 +64,6 @@ jobs:
           --add-data "bin;bin"
           --collect-data opendataloader_pdf
           --hidden-import waitress
-          --hidden-import webview
           --windowed
           launcher.py
 

@@ -12,10 +12,15 @@ Responsibilities:
     user's system PATH (e.g. a stale old Java 8 install).
   - Serves the Flask app with waitress (a real WSGI server) in a background
     thread.
-  - Opens a native desktop window (pywebview) pointing at the local server —
-    this is what makes it feel like a real app instead of "a website that
-    happens to run locally". Falls back to the default browser if pywebview
-    can't start for some reason.
+  - Opens Edge/Chrome/Brave in "app mode" (--app=URL) pointing at the local
+    server — a completely chromeless window (no tabs, no address bar), which
+    is what makes it feel like a real desktop app rather than "a website
+    that happens to run locally". This is used instead of a pywebview-style
+    embedded native window because pywebview's Windows backends depend on
+    pythonnet/.NET Framework interop, which is a well-documented, flaky
+    source of failures once packaged with PyInstaller (works on one machine,
+    breaks on another). Falls back to the plain default browser if no
+    Chromium-based browser can be found at all.
   - Because packaged "windowed" builds have no console attached, everything
     is also logged to proofsheet.log next to the executable, and sys.stdout/
     sys.stderr are given somewhere safe to write to (in windowed PyInstaller
@@ -29,6 +34,7 @@ import sys
 import re
 import socket
 import logging
+import subprocess
 import threading
 import time
 import webbrowser
@@ -124,6 +130,47 @@ def java_major_version(version_text: str):
     if major == 1 and m.group(2):
         return int(m.group(2))
     return major
+
+
+def find_chromium_browser():
+    """Locate an installed Edge or Chrome so we can launch it in --app= mode
+    (a chromeless window: no tabs, no address bar, no browser furniture).
+
+    This is deliberately used instead of pywebview: pywebview's Windows
+    backends depend on pythonnet/clr loading .NET Framework, which is a
+    well-documented, inconsistent source of failures under PyInstaller
+    (works on one machine, breaks on another, breaks after a reboot — see
+    https://github.com/r0x0r/pywebview/issues/1215). Edge ships with every
+    Windows 10/11 install, so --app mode is far more reliable for this.
+    """
+    import shutil
+
+    candidates = []
+    if sys.platform == "win32":
+        env_dirs = [os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"),
+                    os.environ.get("LOCALAPPDATA")]
+        for base in env_dirs:
+            if not base:
+                continue
+            candidates += [
+                os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
+                os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"),
+                os.path.join(base, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+            ]
+        for name in ("msedge.exe", "chrome.exe", "brave.exe"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+    else:
+        for name in ("google-chrome", "chromium-browser", "chromium", "microsoft-edge", "brave-browser"):
+            found = shutil.which(name)
+            if found:
+                candidates.append(found)
+
+    for c in candidates:
+        if c and os.path.isfile(c):
+            return c
+    return None
 
 
 def find_free_port(preferred: int = 5050) -> int:
@@ -228,19 +275,26 @@ def main():
         return
 
     try:
-        import webview
-        window_kwargs = dict(
-            title="Proofsheet",
-            url=url,
-            width=1280,
-            height=860,
-            min_size=(900, 600),
-        )
-        webview.create_window(**window_kwargs)
-        log.info("Opening native window.")
-        webview.start()
+        browser = find_chromium_browser()
+        if not browser:
+            raise RuntimeError("No Edge/Chrome/Brave install found for app mode.")
+
+        profile_dir = os.path.join(app_dir(), ".proofsheet-app-profile")
+        os.makedirs(profile_dir, exist_ok=True)
+
+        args = [
+            browser,
+            f"--app={url}",
+            "--window-size=1280,860",
+            f"--user-data-dir={profile_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+        ]
+        log.info("Opening app-mode window via %s", browser)
+        proc = subprocess.Popen(args)
+        proc.wait()  # blocks until the app window is closed
     except Exception:
-        log.exception("pywebview failed to start a native window — falling back to the default browser.")
+        log.exception("Could not open a chromeless app window — falling back to the default browser tab.")
         webbrowser.open(url)
         print(f"Proofsheet is running at {url} — this window will keep it alive. Close it to stop Proofsheet.")
         try:

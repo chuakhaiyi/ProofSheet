@@ -10,7 +10,7 @@ setlocal
 
 echo === Installing Python build dependencies ===
 pip install -r requirements.txt
-pip install pyinstaller waitress pywebview pythonnet pywin32 comtypes
+pip install pyinstaller waitress
 
 echo.
 echo === Checking for Java and Poppler on this machine ===
@@ -35,7 +35,6 @@ pyinstaller --noconfirm --clean --onedir --name Proofsheet ^
   --add-data "templates;templates" ^
   --collect-data opendataloader_pdf ^
   --hidden-import waitress ^
-  --hidden-import webview ^
   --windowed ^
   launcher.py
 

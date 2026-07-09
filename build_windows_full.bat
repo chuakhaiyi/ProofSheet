@@ -12,7 +12,7 @@ setlocal
 
 echo === Installing Python build dependencies ===
 pip install -r requirements.txt
-pip install pyinstaller waitress pywebview pythonnet pywin32 comtypes
+pip install pyinstaller waitress
 
 if not exist bin mkdir bin
 
@@ -59,7 +59,6 @@ pyinstaller --noconfirm --clean --onedir --name Proofsheet ^
   --add-data "bin;bin" ^
   --collect-data opendataloader_pdf ^
   --hidden-import waitress ^
-  --hidden-import webview ^
   --windowed ^
   launcher.py
 

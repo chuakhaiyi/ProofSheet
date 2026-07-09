@@ -15,3 +15,5 @@ jre.zip
 poppler.zip
 bin_jre_tmp/
 bin_poppler_tmp/
+proofsheet.log
+.proofsheet-app-profile/

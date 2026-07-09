@@ -83,9 +83,17 @@ pdfapp/
 ## Packaging as a Windows desktop app (.exe)
 
 `launcher.py` + PyInstaller turn this into a real double-clickable desktop
-app: it opens in its **own native window** (via `pywebview`) with no browser
-chrome at all, backed by `waitress` as a real WSGI server instead of Flask's
-dev server. **PyInstaller can't cross-compile** — you build the `.exe` by
+app: it opens Edge (or Chrome/Brave, whichever is installed) in **app mode**
+— a completely chromeless window with no tabs and no address bar — pointed
+at a `waitress`-served local server instead of Flask's dev server. This is
+used instead of embedding a native window via `pywebview`, because
+pywebview's Windows backends depend on `pythonnet`/.NET Framework interop,
+which is a well-documented, inconsistent source of failures once packaged
+with PyInstaller (see [this pywebview issue](https://github.com/r0x0r/pywebview/issues/1215)
+for a taste of how bad it can get — works on one machine, breaks on another,
+breaks after a reboot). App mode gives the same "it's just an app" feel
+using the browser engine Windows already ships with, with none of that
+fragility. **PyInstaller can't cross-compile** — you build the `.exe` by
 running these scripts *on* Windows (or via the included GitHub Actions
 workflow, which builds it for you in the cloud).
 
@@ -147,9 +155,11 @@ to whatever's already on the system. Check `proofsheet.log` for the "java
 check" line to see which Java is actually being used, and rebuild if the
 bundled one is missing.
 
-If you'd rather have the app open your default browser instead of its own
-window (e.g. `pywebview` isn't working on a particular machine), it already
-falls back to that automatically — check `proofsheet.log` for
-"pywebview failed to start" to confirm that's what happened.
+If the app opens a regular browser tab instead of its own chromeless window,
+check `proofsheet.log` for "Could not open a chromeless app window" — that
+means no Edge/Chrome/Brave install could be found on that PC at all (rare on
+Windows 10/11, since Edge is a system component), and it fell back
+automatically so the app still works either way.
+
 
 

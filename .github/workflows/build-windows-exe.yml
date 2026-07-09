@@ -1,0 +1,90 @@
+name: Build Windows exe
+
+# Lets you get a real Proofsheet.exe without owning a Windows machine.
+# Push this repo to GitHub, then either wait for a push to main, or
+# trigger it manually from the Actions tab ("Run workflow").
+# When it finishes, download the "Proofsheet-windows" artifact — that's
+# your dist\Proofsheet folder, ready to run on any Windows 10/11 PC.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller waitress pywebview
+
+      - name: Download portable JRE (Eclipse Temurin 21)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          Invoke-WebRequest -Uri "https://api.adoptium.net/v3/binary/latest/21/ga/windows/x64/jre/hotspot/normal/eclipse" -OutFile jre.zip
+          Expand-Archive -Path jre.zip -DestinationPath bin_jre_tmp -Force
+          $inner = Get-ChildItem bin_jre_tmp -Directory | Select-Object -First 1
+          if (-not $inner) { throw "JRE zip did not contain a top-level folder as expected." }
+          Move-Item $inner.FullName bin\jre
+          $javaExe = "bin\jre\bin\java.exe"
+          if (-not (Test-Path $javaExe)) { throw "java.exe not found at $javaExe after extraction — JRE zip layout may have changed." }
+          $verOutput = & $javaExe -version 2>&1 | Out-String
+          Write-Host "Bundled JRE version check:`n$verOutput"
+
+      - name: Download Poppler for Windows
+        shell: pwsh
+        run: |
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/oschwartz10612/poppler-windows/releases/latest"
+          $asset = $release.assets | Where-Object { $_.name -like "Release-*.zip" } | Select-Object -First 1
+          if (-not $asset) { throw "Could not find a poppler-windows release asset." }
+          Write-Host "Downloading $($asset.name) from $($asset.browser_download_url)"
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile poppler.zip
+          Expand-Archive -Path poppler.zip -DestinationPath bin_poppler_tmp -Force
+          $inner = Get-ChildItem bin_poppler_tmp -Directory | Select-Object -First 1
+          if (-not $inner) { throw "Poppler zip did not contain a top-level folder as expected." }
+          Move-Item $inner.FullName bin\poppler
+          $candidates = @("bin\poppler\bin\pdftoppm.exe", "bin\poppler\Library\bin\pdftoppm.exe")
+          $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $found) { throw "pdftoppm.exe not found in bundled poppler folder — zip layout may have changed." }
+          Write-Host "Found bundled pdftoppm at $found"
+
+      - name: Build with PyInstaller
+        run: >
+          pyinstaller --noconfirm --clean --onedir --name Proofsheet
+          --add-data "templates;templates"
+          --add-data "bin;bin"
+          --collect-data opendataloader_pdf
+          --hidden-import waitress
+          --hidden-import webview
+          --windowed
+          launcher.py
+
+      - name: Smoke-test the exe (headless — no GUI on the CI runner)
+        shell: pwsh
+        env:
+          PROOFSHEET_NO_GUI: "1"
+        run: |
+          $p = Start-Process -FilePath "dist\Proofsheet\Proofsheet.exe" -PassThru
+          Start-Sleep -Seconds 6
+          try {
+            $resp = Invoke-WebRequest -Uri "http://127.0.0.1:5050/" -UseBasicParsing
+            if ($resp.StatusCode -ne 200) { throw "App did not respond with 200" }
+            echo "Smoke test passed: $($resp.StatusCode)"
+          } finally {
+            Get-Content "dist\Proofsheet\proofsheet.log" -ErrorAction SilentlyContinue
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Proofsheet-windows
+          path: dist/Proofsheet/

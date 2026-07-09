@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Proofsheet — PDF structure studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=IBM+Plex+Mono:wght@400;500&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F7F4EC;
+    --paper-dim:#EFEBE0;
+    --ink:#211D17;
+    --ink-soft:#5B564C;
+    --rule:#D9D2C1;
+    --red:#B33A2E;      /* heading */
+    --blue:#2B4C7E;     /* table */
+    --moss:#5C6B4F;     /* list */
+    --ochre:#B9821F;    /* image/figure */
+    --violet:#6C5A8E;   /* formula */
+    --rose:#9C6B63;     /* caption */
+    --slate:#5B6B75;    /* paragraph */
+    --gray:#8A8477;     /* other */
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Source Sans 3', sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+  ::selection{background:var(--red);color:var(--paper);}
+
+  a{color:var(--blue);}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 28px;}
+
+  /* ---------- header ---------- */
+  header.top{
+    padding:26px 0 18px;
+    border-bottom:1px solid var(--rule);
+  }
+  .brand{
+    display:flex;align-items:baseline;gap:12px;
+  }
+  .brand .mark{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:.14em;
+    color:var(--red);
+    border:1px solid var(--red);
+    padding:2px 7px;
+    border-radius:2px;
+  }
+  .brand h1{
+    font-family:'Fraunces', serif;
+    font-weight:600;
+    font-size:22px;
+    margin:0;
+    letter-spacing:-0.01em;
+  }
+  header .sub{
+    margin:6px 0 0;
+    color:var(--ink-soft);
+    font-size:14.5px;
+    max-width:620px;
+  }
+  header .sub code{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px;
+    background:var(--paper-dim);
+    padding:1px 5px;
+    border-radius:3px;
+  }
+
+  /* ---------- hero / dropzone ---------- */
+  .hero{padding:48px 0 34px;}
+  .sheet{
+    position:relative;
+    background:#fff;
+    border:1px solid var(--rule);
+    border-radius:3px;
+    box-shadow: 0 1px 0 var(--rule), 0 22px 44px -30px rgba(33,29,23,.35);
+    padding:56px 40px;
+    text-align:center;
+    transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+  }
+  .sheet::before{
+    /* dog-ear */
+    content:"";
+    position:absolute; top:0; right:0;
+    width:0; height:0;
+    border-style:solid;
+    border-width:0 26px 26px 0;
+    border-color:transparent var(--paper-dim) transparent transparent;
+  }
+  .sheet.drag{
+    border-color:var(--red);
+    box-shadow: 0 0 0 3px rgba(179,58,46,.12), 0 22px 44px -30px rgba(33,29,23,.35);
+    transform:translateY(-2px);
+  }
+  .sheet .stamp{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    letter-spacing:.16em;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+  }
+  .sheet h2{
+    font-family:'Fraunces', serif;
+    font-weight:500;
+    font-style:italic;
+    font-size:28px;
+    margin:10px 0 6px;
+  }
+  .sheet p.hint{color:var(--ink-soft); font-size:14.5px; margin:0 0 22px;}
+  .filepick{
+    display:inline-flex; align-items:center; gap:10px;
+    background:var(--ink); color:var(--paper);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    padding:11px 20px;
+    border-radius:3px;
+    cursor:pointer;
+    border:none;
+    transition: background .15s ease;
+  }
+  .filepick:hover{background:var(--red);}
+  input[type=file]{display:none;}
+
+  .modes{
+    display:flex; gap:8px; justify-content:center; flex-wrap:wrap;
+    margin-top:26px;
+  }
+  .mode-btn{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    padding:7px 12px;
+    border-radius:20px;
+    border:1px solid var(--rule);
+    background:transparent;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  .mode-btn.active{
+    border-color:var(--ink);
+    color:var(--ink);
+    background:var(--paper-dim);
+  }
+  .filename-row{
+    margin-top:18px; font-size:13.5px; color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    min-height:18px;
+  }
+
+  .status{
+    margin-top:18px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+    display:none;
+  }
+  .status.show{display:block;}
+  .status.err{color:var(--red);}
+
+  /* ---------- legend ---------- */
+  .legend{
+    display:flex; flex-wrap:wrap; gap:14px 20px;
+    padding:14px 0 0;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    color:var(--ink-soft);
+  }
+  .legend .item{display:flex; align-items:center; gap:6px;}
+  .legend .sw{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  /* ---------- results ---------- */
+  .results{display:none; padding:8px 0 70px;}
+  .results.show{display:block;}
+  .results-grid{
+    display:grid; grid-template-columns: 1.1fr 1fr; gap:26px;
+    align-items:start;
+  }
+  @media (max-width: 880px){
+    .results-grid{grid-template-columns:1fr;}
+  }
+
+  .panel{
+    background:#fff; border:1px solid var(--rule); border-radius:3px;
+  }
+  .panel-head{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 16px; border-bottom:1px solid var(--rule);
+  }
+  .panel-head h3{
+    margin:0; font-family:'IBM Plex Mono',monospace; font-size:12px;
+    letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft);
+  }
+  .panel-body{padding:14px;}
+
+  /* page viewer */
+  .pageviewer{max-height:760px; overflow:auto; background:var(--paper-dim); padding:16px;}
+  .page-stage{position:relative; margin:0 auto 22px; box-shadow:0 4px 18px rgba(33,29,23,.18);}
+  .page-stage img{display:block; width:100%; height:auto;}
+  .box{
+    position:absolute;
+    border:1.5px solid;
+    border-radius:1px;
+    cursor:pointer;
+  }
+  .box .tag{
+    position:absolute; top:-1px; left:-1px;
+    transform:translateY(-100%);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:9.5px;
+    letter-spacing:.04em;
+    padding:1px 4px;
+    color:#fff;
+    white-space:nowrap;
+    line-height:1.5;
+  }
+  .page-num{
+    text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px;
+    color:var(--ink-soft); margin:-14px 0 18px;
+  }
+
+  /* tabs */
+  .tabs{display:flex; gap:4px;}
+  .tab{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px;
+    padding:5px 10px; border-radius:3px; cursor:pointer;
+    color:var(--ink-soft); border:1px solid transparent;
+  }
+  .tab.active{background:var(--paper-dim); color:var(--ink); border-color:var(--rule);}
+  .tabpane{display:none;}
+  .tabpane.active{display:block;}
+
+  pre.code{
+    background:var(--paper-dim);
+    padding:14px; border-radius:3px;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12.5px; line-height:1.6;
+    overflow:auto; max-height:640px;
+    white-space:pre-wrap; word-break:break-word;
+    margin:0;
+  }
+  .md-render{
+    max-height:640px; overflow:auto; padding:2px 4px;
+    font-size:14.5px;
+  }
+  .md-render h1,.md-render h2,.md-render h3{font-family:'Fraunces',serif;}
+  .md-render table{border-collapse:collapse; width:100%; margin:12px 0;}
+  .md-render td,.md-render th{border:1px solid var(--rule); padding:6px 8px; font-size:13px;}
+
+  .downloads{display:flex; flex-direction:column; gap:8px; margin-top:6px;}
+  .dl-btn{
+    display:flex; align-items:center; justify-content:space-between;
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+    padding:10px 12px; border:1px solid var(--rule); border-radius:3px;
+    color:var(--ink); text-decoration:none;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .dl-btn:hover{border-color:var(--ink); background:var(--paper-dim);}
+  .dl-btn .arrow{color:var(--red);}
+
+  .stat-strip{
+    display:flex; gap:22px; flex-wrap:wrap;
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft);
+    padding:12px 16px; border-top:1px solid var(--rule);
+  }
+  .stat-strip b{color:var(--ink); font-weight:600;}
+
+  footer{
+    border-top:1px solid var(--rule);
+    padding:22px 0 50px;
+    font-size:12.5px; color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+  }
+  footer a{color:var(--ink-soft);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand">
+      <span class="mark">PDF/UA</span>
+      <h1>Proofsheet</h1>
+    </div>
+    <p class="sub">A structure-proofing desk for PDFs, built on <code>opendataloader-pdf</code>.
+      Drop a file, see exactly what the parser sees, and export Markdown, JSON, or a tagged, accessible PDF.
+      Everything runs on this machine — nothing is uploaded anywhere else.</p>
+  </div>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <div class="sheet" id="sheet">
+      <div class="stamp">Structure &amp; accessibility desk</div>
+      <h2>Lay a PDF on the table</h2>
+      <p class="hint">Drag a file here, or choose one from your machine. Digital PDFs work best; scans need OCR mode.</p>
+      <label class="filepick" for="fileInput">Select a PDF</label>
+      <input type="file" id="fileInput" accept="application/pdf">
+
+      <div class="modes">
+        <button class="mode-btn active" data-mode="fast">Fast (local, deterministic)</button>
+        <button class="mode-btn" data-mode="structure">Use existing tags</button>
+        <button class="mode-btn" data-mode="tagged">Auto-tag for accessibility</button>
+        <button class="mode-btn" data-mode="sanitize">Sanitize (redact PII)</button>
+      </div>
+
+      <div class="filename-row" id="filenameRow"></div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="legend">
+      <span class="item"><span class="sw" style="background:var(--red)"></span>heading</span>
+      <span class="item"><span class="sw" style="background:var(--slate)"></span>paragraph</span>
+      <span class="item"><span class="sw" style="background:var(--blue)"></span>table</span>
+      <span class="item"><span class="sw" style="background:var(--moss)"></span>list</span>
+      <span class="item"><span class="sw" style="background:var(--ochre)"></span>image / figure</span>
+      <span class="item"><span class="sw" style="background:var(--violet)"></span>formula</span>
+      <span class="item"><span class="sw" style="background:var(--rose)"></span>caption</span>
+      <span class="item"><span class="sw" style="background:var(--gray)"></span>other</span>
+    </div>
+  </section>
+
+  <section class="results" id="results">
+    <div class="results-grid">
+
+      <div class="panel">
+        <div class="panel-head"><h3>Structure map</h3><span id="pageCount" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink-soft);"></span></div>
+        <div class="panel-body pageviewer" id="pageviewer"></div>
+        <div class="stat-strip" id="statStrip"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h3>Output</h3>
+          <div class="tabs">
+            <div class="tab active" data-tab="md">Markdown</div>
+            <div class="tab" data-tab="json">JSON</div>
+            <div class="tab" data-tab="dl">Downloads</div>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="tabpane active" id="tab-md"><div class="md-render" id="mdRender"></div></div>
+          <div class="tabpane" id="tab-json"><pre class="code" id="jsonRender"></pre></div>
+          <div class="tabpane" id="tab-dl"><div class="downloads" id="dlList"></div></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">
+    Parsing by <a href="https://github.com/opendataloader-project/opendataloader-pdf" target="_blank">opendataloader-pdf</a> (Apache-2.0), running locally via its Python library. Page thumbnails rendered with Poppler.
+  </div>
+</footer>
+
+<script>
+const TYPE_COLORS = {
+  heading: 'var(--red)',
+  title: 'var(--red)',
+  paragraph: 'var(--slate)',
+  table: 'var(--blue)',
+  'table-cell': 'var(--blue)',
+  list: 'var(--moss)',
+  'list-item': 'var(--moss)',
+  listitem: 'var(--moss)',
+  image: 'var(--ochre)',
+  picture: 'var(--ochre)',
+  figure: 'var(--ochre)',
+  formula: 'var(--violet)',
+  caption: 'var(--rose)',
+};
+function colorFor(type){
+  if(!type) return 'var(--gray)';
+  return TYPE_COLORS[type.toLowerCase()] || 'var(--gray)';
+}
+function resolveVar(v){
+  // resolve a css var() string to an actual color for inline SVG-less usage
+  const el = document.createElement('div');
+  el.style.color = v;
+  document.body.appendChild(el);
+  const c = getComputedStyle(el).color;
+  document.body.removeChild(el);
+  return c;
+}
+
+let selectedMode = 'fast';
+let currentFile = null;
+
+document.querySelectorAll('.mode-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedMode = btn.dataset.mode;
+  });
+});
+
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.tabpane').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-'+tab.dataset.tab).classList.add('active');
+  });
+});
+
+const sheet = document.getElementById('sheet');
+const fileInput = document.getElementById('fileInput');
+const filenameRow = document.getElementById('filenameRow');
+const statusEl = document.getElementById('status');
+
+['dragenter','dragover'].forEach(ev=>{
+  sheet.addEventListener(ev, e=>{ e.preventDefault(); sheet.classList.add('drag'); });
+});
+['dragleave','drop'].forEach(ev=>{
+  sheet.addEventListener(ev, e=>{ e.preventDefault(); sheet.classList.remove('drag'); });
+});
+sheet.addEventListener('drop', e=>{
+  const f = e.dataTransfer.files[0];
+  if(f) handleFile(f);
+});
+fileInput.addEventListener('change', e=>{
+  const f = e.target.files[0];
+  if(f) handleFile(f);
+});
+
+function setStatus(msg, isErr){
+  statusEl.textContent = msg;
+  statusEl.classList.add('show');
+  statusEl.classList.toggle('err', !!isErr);
+}
+
+function handleFile(f){
+  if(f.type !== 'application/pdf' && !f.name.toLowerCase().endsWith('.pdf')){
+    setStatus('Only PDF files are supported.', true);
+    return;
+  }
+  currentFile = f;
+  filenameRow.textContent = f.name + '  ·  ' + Math.round(f.size/1024) + ' KB';
+  convert(f);
+}
+
+async function convert(file){
+  setStatus('Parsing “' + file.name + '” — layout analysis in progress…');
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('mode', selectedMode);
+  try{
+    const res = await fetch('/api/convert', {method:'POST', body: fd});
+    const data = await res.json();
+    if(!res.ok){
+      setStatus(data.error || 'Conversion failed.', true);
+      return;
+    }
+    setStatus('Done — ' + (data.structure ? countElements(data.structure) : 0) + ' elements detected.');
+    renderResults(data);
+  }catch(err){
+    setStatus('Request failed: ' + err.message, true);
+  }
+}
+
+function countElements(structure){
+  return (structure.kids || []).length;
+}
+
+function renderResults(data){
+  document.getElementById('results').classList.add('show');
+
+  // Markdown
+  const md = data.markdown || '';
+  document.getElementById('mdRender').innerHTML = simpleMarkdownToHtml(md);
+
+  // JSON
+  document.getElementById('jsonRender').textContent = data.structure ? JSON.stringify(data.structure, null, 2) : '(no JSON produced)';
+
+  // Downloads
+  const dlList = document.getElementById('dlList');
+  dlList.innerHTML = '';
+  const files = [];
+  if(data.markdown_file) files.push(['Markdown (.md)', data.markdown_file]);
+  if(data.json_file) files.push(['JSON (.json)', data.json_file]);
+  if(data.tagged_pdf_file) files.push(['Tagged, accessible PDF (.pdf)', data.tagged_pdf_file]);
+  files.forEach(([label, fname])=>{
+    const a = document.createElement('a');
+    a.className = 'dl-btn';
+    a.href = '/api/download/' + data.job_id + '/' + encodeURIComponent(fname);
+    a.innerHTML = '<span>'+label+'</span><span class="arrow">↓</span>';
+    dlList.appendChild(a);
+  });
+  if(files.length === 0){
+    dlList.innerHTML = '<span style="color:var(--ink-soft);font-family:\'IBM Plex Mono\',monospace;font-size:12.5px;">No downloadable files for this mode.</span>';
+  }
+
+  // Page viewer with structure overlay
+  const viewer = document.getElementById('pageviewer');
+  viewer.innerHTML = '';
+  const pageSizes = data.page_sizes || {};
+  const thumbs = data.thumbnails || [];
+  document.getElementById('pageCount').textContent = thumbs.length + (thumbs.length===1 ? ' page' : ' pages');
+
+  // group elements by page
+  const byPage = {};
+  (data.structure && data.structure.kids ? data.structure.kids : []).forEach(el=>{
+    const p = el['page number'] || 1;
+    byPage[p] = byPage[p] || [];
+    byPage[p].push(el);
+  });
+
+  const typeCounts = {};
+
+  thumbs.forEach((thumbPath, idx)=>{
+    const pageNum = idx + 1;
+    const stage = document.createElement('div');
+    stage.className = 'page-stage';
+    const img = document.createElement('img');
+    img.src = '/api/thumb/' + data.job_id + '/' + thumbPath;
+    stage.appendChild(img);
+
+    const els = byPage[pageNum] || [];
+    const size = pageSizes[pageNum];
+
+    img.addEventListener('load', ()=>{
+      if(!size) return;
+      els.forEach(el=>{
+        const bb = el['bounding box'];
+        if(!bb) return;
+        const [left, bottom, right, top] = bb;
+        const wPct = ((right-left)/size.w)*100;
+        const hPct = ((top-bottom)/size.h)*100;
+        const xPct = (left/size.w)*100;
+        const yPct = (1 - (top/size.h))*100;
+
+        const box = document.createElement('div');
+        box.className = 'box';
+        const col = colorFor(el.type);
+        box.style.left = xPct+'%';
+        box.style.top = yPct+'%';
+        box.style.width = wPct+'%';
+        box.style.height = hPct+'%';
+        box.style.borderColor = col;
+        box.title = (el.type||'element') + (el.content ? ': ' + String(el.content).slice(0,80) : '');
+
+        const tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.style.background = col;
+        tag.textContent = (el.type||'?').slice(0,10);
+        box.appendChild(tag);
+
+        stage.appendChild(box);
+
+        typeCounts[el.type] = (typeCounts[el.type]||0)+1;
+      });
+    });
+
+    viewer.appendChild(stage);
+    const pn = document.createElement('div');
+    pn.className = 'page-num';
+    pn.textContent = 'Page ' + pageNum;
+    viewer.appendChild(pn);
+  });
+
+  const strip = document.getElementById('statStrip');
+  const total = Object.values(typeCounts).reduce((a,b)=>a+b,0);
+  strip.innerHTML = '<span><b>'+ (data.structure?.['number of pages'] ?? thumbs.length) +'</b> pages</span>' +
+    Object.entries(typeCounts).map(([t,c])=>'<span><b>'+c+'</b> '+t+'</span>').join('');
+}
+
+// Minimal, safe-ish markdown renderer for headings / paragraphs / lists / tables / bold / italic.
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function simpleMarkdownToHtml(md){
+  const lines = md.split('\n');
+  let html = '';
+  let inList = false;
+  let tableBuf = [];
+  function flushList(){ if(inList){ html += '</ul>'; inList=false; } }
+  function flushTable(){
+    if(tableBuf.length){
+      html += '<table>';
+      tableBuf.forEach((row, i)=>{
+        if(/^\s*\|?\s*-{2,}/.test(row)) return;
+        const cells = row.replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+        html += '<tr>' + cells.map(c=> (i===0? '<th>':'<td>') + escapeHtml(c) + (i===0?'</th>':'</td>')).join('') + '</tr>';
+      });
+      html += '</table>';
+      tableBuf = [];
+    }
+  }
+  lines.forEach(line=>{
+    if(/^\s*\|.*\|\s*$/.test(line)){
+      tableBuf.push(line);
+      return;
+    } else {
+      flushTable();
+    }
+    let m;
+    if(m = line.match(/^(#{1,6})\s+(.*)/)){
+      flushList();
+      const lvl = m[1].length;
+      html += `<h${lvl}>${escapeHtml(m[2])}</h${lvl}>`;
+    } else if(m = line.match(/^\s*-\s+(.*)/)){
+      if(!inList){ html += '<ul>'; inList = true; }
+      html += `<li>${escapeHtml(m[1])}</li>`;
+    } else if(line.trim()===''){
+      flushList();
+    } else {
+      flushList();
+      let t = escapeHtml(line);
+      t = t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>');
+      html += `<p>${t}</p>`;
+    }
+  });
+  flushList(); flushTable();
+  return html || '<p style="color:var(--ink-soft)">(empty)</p>';
+}
+</script>
+
+</body>
+</html>

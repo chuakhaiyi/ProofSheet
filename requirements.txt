@@ -1,0 +1,4 @@
+Flask>=3.0
+opendataloader-pdf>=2.4.0
+waitress>=3.0
+pywebview>=6.0

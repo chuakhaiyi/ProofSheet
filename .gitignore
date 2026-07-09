@@ -1,0 +1,17 @@
+uploads/*
+outputs/*
+!uploads/.gitkeep
+!outputs/.gitkeep
+__pycache__/
+*.pyc
+*.spec
+server*.log
+venv/
+build/
+dist/
+bin/jre/
+bin/poppler/
+jre.zip
+poppler.zip
+bin_jre_tmp/
+bin_poppler_tmp/

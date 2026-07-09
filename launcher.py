@@ -211,10 +211,41 @@ def show_fatal_error(message: str):
         pass
 
 
+def install_thread_exception_logging(log):
+    """By default, an unhandled exception in a background thread just gets
+    printed to sys.stderr and the thread quietly dies — and in a --windowed
+    build sys.stderr has been redirected to os.devnull as a safety net, so
+    a crash in the server thread would otherwise vanish with zero trace.
+    This makes sure it lands in proofsheet.log instead.
+    """
+    import traceback as tb
+
+    def _hook(args):
+        log.error(
+            "Unhandled exception in thread %r:\n%s",
+            args.thread.name if args.thread else "?",
+            "".join(tb.format_exception(args.exc_type, args.exc_value, args.exc_traceback)),
+        )
+
+    threading.excepthook = _hook
+
+
+def run_server(app, host, port, log):
+    """Thread target for the WSGI server — wrapped so a crash is logged
+    with a full traceback instead of disappearing.
+    """
+    try:
+        from waitress import serve
+        serve(app, host=host, port=port)
+    except Exception:
+        log.exception("The server crashed while running.")
+
+
 def main():
     log = setup_logging_and_safe_streams()
     log.info("=" * 60)
     log.info("Proofsheet starting (frozen=%s)", getattr(sys, "frozen", False))
+    install_thread_exception_logging(log)
 
     prepend_bundled_tools_to_path(log)
 
@@ -254,11 +285,9 @@ def main():
     url = f"http://127.0.0.1:{port}"
     log.info("Serving at %s", url)
 
-    from waitress import serve
-
     server_thread = threading.Thread(
-        target=serve,
-        kwargs=dict(app=flask_app_module.app, host="127.0.0.1", port=port),
+        target=run_server,
+        args=(flask_app_module.app, "127.0.0.1", port, log),
         daemon=True,
     )
     server_thread.start()
@@ -285,6 +314,7 @@ def main():
         args = [
             browser,
             f"--app={url}",
+            "--new-window",
             "--window-size=1280,860",
             f"--user-data-dir={profile_dir}",
             "--no-first-run",

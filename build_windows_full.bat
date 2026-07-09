@@ -12,7 +12,7 @@ setlocal
 
 echo === Installing Python build dependencies ===
 pip install -r requirements.txt
-pip install pyinstaller waitress pywebview
+pip install pyinstaller waitress pywebview pythonnet pywin32 comtypes
 
 if not exist bin mkdir bin
 

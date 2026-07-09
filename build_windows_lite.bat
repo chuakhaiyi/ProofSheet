@@ -10,7 +10,7 @@ setlocal
 
 echo === Installing Python build dependencies ===
 pip install -r requirements.txt
-pip install pyinstaller waitress pywebview
+pip install pyinstaller waitress pywebview pythonnet pywin32 comtypes
 
 echo.
 echo === Checking for Java and Poppler on this machine ===

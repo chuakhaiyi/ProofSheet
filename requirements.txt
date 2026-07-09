@@ -2,3 +2,6 @@ Flask>=3.0
 opendataloader-pdf>=2.4.0
 waitress>=3.0
 pywebview>=6.0
+pythonnet>=3.0; sys_platform == "win32"
+pywin32; sys_platform == "win32"
+comtypes; sys_platform == "win32"

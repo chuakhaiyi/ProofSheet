@@ -1,149 +1,212 @@
-# Proofsheet — a PDF structure studio
+# Proofsheet PDF Studio
 
-A small local web app built on top of
+Proofsheet PDF Studio is a local desktop app for turning PDFs into structured
+Markdown, JSON, and visual structure maps.
+
+It is built on top of
 [`opendataloader-pdf`](https://github.com/opendataloader-project/opendataloader-pdf),
 the Apache-2.0 licensed PDF layout parser from the OpenDataLoader project.
 
-Drop in a PDF and you get:
+Everything runs locally. Your PDFs stay on your machine.
 
-- **Markdown** — clean text, good for feeding an LLM or a RAG pipeline
-- **JSON** — every detected element (heading, paragraph, table, list, image…)
-  with its bounding box, font, and semantic type
-- **A structure map** — the page rendered as an image with the JSON elements
-  drawn on top as color-coded boxes, so you can see exactly what the parser found
-- **Tagged, accessible PDF** — optional PDF/UA-style auto-tagging for accessibility
+## What It Does
 
-Everything runs locally: the PDF never leaves your machine.
+- Converts PDFs into clean Markdown.
+- Exports structured JSON with headings, paragraphs, lists, tables, captions,
+  images, text blocks, and bounding boxes.
+- Shows a structure map with rendered page thumbnails and detected layout boxes.
+- Can use an existing PDF structure tree when available.
+- Can generate a tagged PDF for accessibility workflows.
+- Runs as a standalone Windows desktop application, not as a browser tab.
 
-## How it works
+## Standalone Windows App
 
-`opendataloader-pdf` is a Java-based parser exposed as a Python library
-(it ships the JAR inside the pip package and calls it under the hood — hence
-the Java requirement below). This app is a thin Flask server that:
-
-1. Accepts an uploaded PDF
-2. Calls `opendataloader_pdf.convert(...)` to produce Markdown + JSON
-   (and optionally a tagged PDF)
-3. Renders each page to a PNG with Poppler's `pdftoppm`, so the JSON's
-   bounding boxes (in PDF points) can be drawn as an overlay in the browser
-4. Serves the results back to a single-page frontend
-
-## Requirements
-
-- Python 3.9+
-- **Java 11+** on your PATH (the parser is JVM-based) — check with `java -version`
-- **Poppler utils** (`pdftoppm`, `pdfinfo`) for page thumbnails:
-  - macOS: `brew install poppler`
-  - Ubuntu/Debian: `sudo apt install poppler-utils`
-  - Windows: install a poppler binary build and add it to PATH
-
-## Setup
-
-```bash
-cd pdfapp
-python3 -m venv venv && source venv/bin/activate   # optional but recommended
-pip install -r requirements.txt
-python3 app.py
-```
-
-Then open **http://127.0.0.1:5050** in your browser.
-
-## Modes
-
-- **Fast (local, deterministic)** — the default layout-analysis pipeline, no network calls
-- **Use existing tags** — trusts the PDF's own structure tree (`use_struct_tree`) when the file already has one, instead of re-deriving layout from scratch
-- **Auto-tag for accessibility** — also emits a tagged PDF (`tagged-pdf` format) suitable for accessibility remediation workflows
-- **Sanitize (redact PII)** — passes `sanitize=True` through to the library
-
-`opendataloader-pdf` also supports a **hybrid mode** that calls an external
-OCR/vision service for scanned documents (`hybrid=...`, `hybrid_url=...`).
-That's not wired into this UI, but `app.py`'s `convert()` call is the only
-place you'd need to add it — see the library's own README for the parameters.
-
-## Project layout
-
-```
-pdfapp/
-  app.py                 Flask backend (upload, convert, thumbnail, download)
-  templates/index.html   Single-page frontend (drop zone, structure map, output tabs)
-  uploads/                per-job uploaded PDFs (gitignored)
-  outputs/                per-job Markdown/JSON/tagged-PDF/thumbnails (gitignored)
-```
-
-## Extending it
-
-- Swap the Flask dev server for `gunicorn`/`waitress` if you want to actually
-  deploy this rather than run it locally.
-- The `/api/convert` route is the seam for adding more of the library's
-  options (page ranges, image extraction, OCR hybrid mode, per-language
-  reading order, etc.) — they all map directly onto `opendataloader_pdf.convert()` kwargs.
-- Job folders under `uploads/` and `outputs/` aren't cleaned up automatically;
-  add a cron/cleanup job or a TTL if you run this somewhere long-lived.
-
-## Packaging as a Windows desktop app (.exe)
-
-`launcher.py` + PyInstaller turn this into a real double-clickable desktop
-app. The app still runs its PDF engine locally with `waitress`, but the UI is
-shown inside a bundled Qt WebEngine window, not Microsoft Edge or a browser tab.
-That makes it feel like normal Windows software: double-click `Proofsheet.exe`,
-use the app window, close the app window when you are done. **PyInstaller can't
-cross-compile** -- you build the `.exe` by running these scripts *on* Windows
-(or via the included GitHub Actions workflow, which builds it for you in the
-cloud).
-Two build tiers, depending on what you want to ship:
-
-**1. Lite (`build_windows_lite.bat`)** — small exe, but the end user's PC
-needs Java 11+ and Poppler already installed and on PATH. Good for your own
-machine or a team that already has these.
-
-**2. Fully self-contained (`build_windows_full.bat`)** — downloads a portable
-Eclipse Temurin JRE and a Poppler-for-Windows build into `bin/jre` and
-`bin/poppler`, and bundles them into the exe's folder. `launcher.py` puts
-those folders first on PATH before anything else runs, so end users need
-nothing pre-installed. This is ~200–300 MB but "just works."
-
-To build either, **on a Windows machine**, from the `pdfapp` folder:
+The recommended build is the full standalone app:
 
 ```bat
-build_windows_lite.bat
-REM or
 build_windows_full.bat
 ```
 
-The result is `dist\Proofsheet\Proofsheet.exe` — ship the whole
-`dist\Proofsheet` folder (the exe needs its `_internal` folder next to it,
-and `bin` too if you built the self-contained version).
+This creates:
 
-### Don't have a Windows machine? Use GitHub Actions
+```text
+dist\Proofsheet\Proofsheet.exe
+```
 
-`.github/workflows/build-windows-exe.yml` builds the fully self-contained
-version on a real Windows runner in GitHub's cloud:
+Ship the entire `dist\Proofsheet` folder together. The `.exe` needs the
+`_internal` folder beside it.
 
-1. Push this project to a GitHub repo.
-2. Go to the repo's **Actions** tab → **Build Windows exe** → **Run workflow**
-   (or just push to `main`; it also runs automatically).
-3. When it finishes, download the **Proofsheet-windows** artifact — that's
-   your `dist\Proofsheet` folder, ready to run on any Windows 10/11 PC.
+The full build includes:
 
-The workflow verifies the bundled JRE and Poppler actually extracted
-correctly (checking for `java.exe`/`pdftoppm.exe` and failing loudly if not,
-instead of silently shipping a broken bundle), then smoke-tests the built
-exe headlessly before uploading.
+- the Proofsheet desktop window
+- bundled Java 21
+- bundled Poppler tools for PDF page rendering
+- the app icon in `assets\app_icon.ico` and `assets\app_icon.png`
 
-### Troubleshooting a packaged exe
+End users do not need to install Java, Poppler, or Python when using the full
+standalone build.
 
-Because the windowed build has no console, **everything is logged to
-`proofsheet.log`**, written next to `Proofsheet.exe` itself. If the app
-won't start, or a conversion fails oddly, check that file first — dependency
-checks (Java/Poppler found, and their versions) are logged on every startup.
+## Desktop Icon
 
-A specific error worth calling out: if `proofsheet.log` (or a conversion
-error in the UI) mentions **`UnsupportedClassVersionError`** or "this
-version of the Java Runtime only recognizes class file versions up to
-NN.0", that means an **old Java install elsewhere on the PC is being found
-before Proofsheet's own bundled Java 21** — usually a leftover Java 8 from
-some other software. `launcher.py` puts the bundled JRE first on PATH, but
-if the bundle itself failed to package correctly, it silently falls through
-to whatever's already on the system. Check `proofsheet.log` for the "java
-check" line to see which Java is actually being used, and rebuild if the
-bundled one is missing.
+The app icon lives in:
+
+```text
+assets\app_icon.ico
+assets\app_icon.png
+```
+
+The `.ico` file is embedded into `Proofsheet.exe`.
+The `.png` file is used for the top-left icon in the app window.
+
+If you replace the icon later, keep the same filenames and rebuild the app.
+
+## Build Options
+
+### Full Build
+
+Use this for the version you share with other people:
+
+```bat
+build_windows_full.bat
+```
+
+This calls `build_windows_full.ps1`, downloads the portable Java and Poppler
+runtimes if needed, and bundles them into the app.
+
+### Lite Build
+
+Use this only if Java 11+ and Poppler are already installed on the target PC:
+
+```bat
+build_windows_lite.bat
+```
+
+The lite build is smaller, but it depends on the user's system PATH having:
+
+- `java`
+- `pdftoppm`
+- `pdfinfo`
+
+## GitHub Actions Build
+
+The workflow at:
+
+```text
+.github\workflows\build-windows-exe.yml
+```
+
+builds the full standalone Windows app on GitHub.
+
+To use it:
+
+1. Push the project to GitHub.
+2. Open the repo's Actions tab.
+3. Run the `Build Windows exe` workflow, or push to `main`.
+4. Download the `Proofsheet-windows` artifact when it finishes.
+
+That artifact contains the ready-to-run `dist\Proofsheet` folder.
+
+## Local Development
+
+For development, you can run the Flask app directly:
+
+```bash
+pip install -r requirements.txt
+python app.py
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5050
+```
+
+When running this way, your machine must have Java 11+ and Poppler available on
+PATH unless you are launching through the packaged desktop app.
+
+## Project Layout
+
+```text
+pdfapp/
+  app.py                         Flask backend and PDF conversion logic
+  launcher.py                    Desktop app launcher used by PyInstaller
+  templates/index.html           Main UI
+  assets/app_icon.ico            Windows executable icon
+  assets/app_icon.png            App window icon
+  build_windows_full.bat         Friendly full-build launcher
+  build_windows_full.ps1         Full standalone build script
+  build_windows_lite.bat         Smaller build for machines with dependencies
+  requirements.txt               Python dependencies
+  uploads/                       Runtime uploads, gitignored except .gitkeep
+  outputs/                       Runtime outputs, gitignored except .gitkeep
+```
+
+## What Not To Commit
+
+These are generated locally and should stay out of GitHub:
+
+```text
+bin/
+build/
+dist/
+__pycache__/
+Proofsheet.spec
+proofsheet.log
+uploads/*
+outputs/*
+```
+
+They are already covered by `.gitignore`.
+
+Do commit:
+
+```text
+assets/
+app.py
+launcher.py
+templates/
+requirements.txt
+build_windows_full.bat
+build_windows_full.ps1
+build_windows_lite.bat
+.github/workflows/build-windows-exe.yml
+README.md
+```
+
+## Troubleshooting
+
+### App Opens But Conversion Fails
+
+Check:
+
+```text
+dist\Proofsheet\proofsheet.log
+```
+
+The packaged app writes startup and dependency checks there.
+
+### Java Error
+
+If you see `UnsupportedClassVersionError`, the app is using an old Java runtime.
+Use the full standalone build so Proofsheet uses its bundled Java 21.
+
+### Structure Map Has No Page Images
+
+The structure map needs Poppler's `pdftoppm` and `pdfinfo`.
+
+The full standalone app bundles Poppler. If thumbnails still fail, check
+`proofsheet.log` for the Poppler version and any `pdftoppm` error message.
+
+### Windows Icon Does Not Update Immediately
+
+Windows Explorer sometimes caches `.exe` icons. If the old icon still appears:
+
+- rename the rebuilt folder or `.exe`
+- refresh Explorer
+- pin/unpin the app again if it was pinned to the taskbar
+
+## License Notes
+
+Proofsheet uses `opendataloader-pdf`, which is Apache-2.0 licensed.
+Check that project's license and dependency notices before distributing a
+public release.

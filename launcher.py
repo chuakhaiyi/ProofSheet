@@ -12,22 +12,15 @@ Responsibilities:
     user's system PATH (e.g. a stale old Java 8 install).
   - Serves the Flask app with waitress (a real WSGI server) in a background
     thread.
-  - Opens Edge/Chrome/Brave in "app mode" (--app=URL) pointing at the local
-    server — a completely chromeless window (no tabs, no address bar), which
-    is what makes it feel like a real desktop app rather than "a website
-    that happens to run locally". This is used instead of a pywebview-style
-    embedded native window because pywebview's Windows backends depend on
-    pythonnet/.NET Framework interop, which is a well-documented, flaky
-    source of failures once packaged with PyInstaller (works on one machine,
-    breaks on another). Falls back to the plain default browser if no
-    Chromium-based browser can be found at all.
+  - Opens the UI inside a bundled Qt WebEngine desktop window, so the user
+    sees a standalone application instead of Edge opening a local website.
   - Because packaged "windowed" builds have no console attached, everything
     is also logged to proofsheet.log next to the executable, and sys.stdout/
     sys.stderr are given somewhere safe to write to (in windowed PyInstaller
     builds they are None by default, which crashes on any bare print()).
   - Set PROOFSHEET_NO_GUI=1 to skip the window entirely and just run the
     server — used by the CI smoke test, where there's no guarantee of a
-    display/WebView2 runtime being available.
+    display being available.
 """
 import os
 import sys
@@ -37,7 +30,6 @@ import logging
 import subprocess
 import threading
 import time
-import webbrowser
 
 
 def app_dir() -> str:
@@ -104,6 +96,16 @@ def prepend_bundled_tools_to_path(log):
         log.info("Bundled tools found and prepended to PATH: %s", found)
     else:
         log.info("No bundled bin/jre or bin/poppler found under %s — using system PATH only.", roots)
+    for folder in found:
+        java_exe = os.path.join(folder, "java.exe")
+        pdftoppm_exe = os.path.join(folder, "pdftoppm.exe")
+        pdfinfo_exe = os.path.join(folder, "pdfinfo.exe")
+        if os.path.isfile(java_exe):
+            os.environ["PROOFSHEET_JAVA_EXE"] = java_exe
+        if os.path.isfile(pdftoppm_exe):
+            os.environ["PROOFSHEET_PDFTOPPM_EXE"] = pdftoppm_exe
+        if os.path.isfile(pdfinfo_exe):
+            os.environ["PROOFSHEET_PDFINFO_EXE"] = pdfinfo_exe
     return found
 
 
@@ -120,6 +122,11 @@ def check_dependency(name: str, version_args, log):
         return False, ""
 
 
+def resolve_command_path(command: str):
+    import shutil
+    return shutil.which(command)
+
+
 def java_major_version(version_text: str):
     """Parse the major version number out of `java -version` output."""
     m = re.search(r'version "(\d+)(?:\.(\d+))?', version_text)
@@ -132,45 +139,36 @@ def java_major_version(version_text: str):
     return major
 
 
-def find_chromium_browser():
-    """Locate an installed Edge or Chrome so we can launch it in --app= mode
-    (a chromeless window: no tabs, no address bar, no browser furniture).
+def require_supported_java(have_java: bool, java_text: str, log):
+    """Stop packaged builds before they can use an old system Java at conversion time."""
+    major = java_major_version(java_text) if have_java else None
+    if have_java and major is not None and major >= 11:
+        os.environ["PROOFSHEET_JAVA_OK"] = "1"
+        return
 
-    This is deliberately used instead of pywebview: pywebview's Windows
-    backends depend on pythonnet/clr loading .NET Framework, which is a
-    well-documented, inconsistent source of failures under PyInstaller
-    (works on one machine, breaks on another, breaks after a reboot — see
-    https://github.com/r0x0r/pywebview/issues/1215). Edge ships with every
-    Windows 10/11 install, so --app mode is far more reliable for this.
-    """
-    import shutil
-
-    candidates = []
-    if sys.platform == "win32":
-        env_dirs = [os.environ.get("PROGRAMFILES"), os.environ.get("PROGRAMFILES(X86)"),
-                    os.environ.get("LOCALAPPDATA")]
-        for base in env_dirs:
-            if not base:
-                continue
-            candidates += [
-                os.path.join(base, "Microsoft", "Edge", "Application", "msedge.exe"),
-                os.path.join(base, "Google", "Chrome", "Application", "chrome.exe"),
-                os.path.join(base, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
-            ]
-        for name in ("msedge.exe", "chrome.exe", "brave.exe"):
-            found = shutil.which(name)
-            if found:
-                candidates.append(found)
+    java_path = resolve_command_path("java") or "(not found)"
+    if have_java and major is not None:
+        problem = f"Found Java {major} at:\n{java_path}"
+    elif have_java:
+        problem = f"Found Java, but could not read its version:\n{java_path}"
     else:
-        for name in ("google-chrome", "chromium-browser", "chromium", "microsoft-edge", "brave-browser"):
-            found = shutil.which(name)
-            if found:
-                candidates.append(found)
+        problem = "Java was not found."
 
-    for c in candidates:
-        if c and os.path.isfile(c):
-            return c
-    return None
+    msg = (
+        f"{problem}\n\n"
+        "Proofsheet needs Java 11 or newer to read PDFs. The standalone build "
+        "should include its own Java under bin\\jre. If you see this message, "
+        "the app was built or copied without that bundled Java folder.\n\n"
+        "Rebuild with build_windows_full.bat or download the full GitHub Actions "
+        "artifact, then keep the whole Proofsheet folder together.\n\n"
+        f"Details were written to:\n{LOG_PATH}"
+    )
+    log.error(msg)
+    os.environ["PROOFSHEET_JAVA_OK"] = "0"
+
+    if getattr(sys, "frozen", False):
+        show_fatal_error("Proofsheet cannot start because its bundled Java is missing or too old.\n\n" + msg)
+        sys.exit(1)
 
 
 def find_free_port(preferred: int = 5050) -> int:
@@ -241,6 +239,44 @@ def run_server(app, host, port, log):
         log.exception("The server crashed while running.")
 
 
+def run_desktop_window(url: str, log):
+    """Open Proofsheet in a bundled Qt desktop window, not an external browser."""
+    try:
+        from PySide6.QtCore import QUrl
+        from PySide6.QtGui import QIcon
+        from PySide6.QtWidgets import QApplication, QMainWindow
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+    except Exception:
+        log.exception("PySide6/Qt WebEngine could not be imported.")
+        show_fatal_error(
+            "Proofsheet's desktop window could not start.\n\n"
+            "The app package may be missing PySide6 / Qt WebEngine files.\n\n"
+            f"Details were written to:\n{LOG_PATH}"
+        )
+        sys.exit(1)
+
+    qt_app = QApplication.instance() or QApplication(sys.argv[:1])
+    icon_path = os.path.join(resource_dir(), "assets", "app_icon.png")
+    if os.path.isfile(icon_path):
+        qt_app.setWindowIcon(QIcon(icon_path))
+    else:
+        log.warning("App icon was not found at %s", icon_path)
+
+    window = QMainWindow()
+    window.setWindowTitle("Proofsheet")
+    if os.path.isfile(icon_path):
+        window.setWindowIcon(QIcon(icon_path))
+    window.resize(1280, 860)
+
+    view = QWebEngineView()
+    view.setUrl(QUrl(url))
+    window.setCentralWidget(view)
+    window.show()
+
+    log.info("Opened bundled Qt desktop window.")
+    qt_app.exec()
+
+
 def main():
     log = setup_logging_and_safe_streams()
     log.info("=" * 60)
@@ -256,20 +292,7 @@ def main():
     have_java, java_text = check_dependency("java", ["java", "-version"], log)
     have_poppler, _ = check_dependency("pdftoppm", ["pdftoppm", "-v"], log)
 
-    if have_java:
-        major = java_major_version(java_text)
-        if major is not None and major < 11:
-            msg = (
-                f"Found Java {major}, but opendataloader-pdf needs Java 11 or newer.\n\n"
-                "This usually means an old Java install elsewhere on this PC is being "
-                "found ahead of Proofsheet's own bundled Java. Uninstalling or updating "
-                "the old Java, or moving Proofsheet's folder so its bundled bin\\jre is "
-                "used, will fix this.\n\n"
-                f"Details were written to:\n{LOG_PATH}"
-            )
-            log.error(msg)
-    else:
-        log.warning("No usable 'java' found on PATH at all.")
+    require_supported_java(have_java, java_text, log)
 
     if not have_poppler:
         log.warning("No usable 'pdftoppm' found — page thumbnails/structure map will not render.")
@@ -303,34 +326,8 @@ def main():
         server_thread.join()
         return
 
-    try:
-        browser = find_chromium_browser()
-        if not browser:
-            raise RuntimeError("No Edge/Chrome/Brave install found for app mode.")
-
-        profile_dir = os.path.join(app_dir(), ".proofsheet-app-profile")
-        os.makedirs(profile_dir, exist_ok=True)
-
-        args = [
-            browser,
-            f"--app={url}",
-            "--new-window",
-            "--window-size=1280,860",
-            f"--user-data-dir={profile_dir}",
-            "--no-first-run",
-            "--no-default-browser-check",
-        ]
-        log.info("Opening app-mode window via %s", browser)
-        proc = subprocess.Popen(args)
-        proc.wait()  # blocks until the app window is closed
-    except Exception:
-        log.exception("Could not open a chromeless app window — falling back to the default browser tab.")
-        webbrowser.open(url)
-        print(f"Proofsheet is running at {url} — this window will keep it alive. Close it to stop Proofsheet.")
-        try:
-            server_thread.join()
-        except KeyboardInterrupt:
-            pass
+    run_desktop_window(url, log)
+    return
 
 
 if __name__ == "__main__":

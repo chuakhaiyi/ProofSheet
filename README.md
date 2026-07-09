@@ -83,20 +83,13 @@ pdfapp/
 ## Packaging as a Windows desktop app (.exe)
 
 `launcher.py` + PyInstaller turn this into a real double-clickable desktop
-app: it opens Edge (or Chrome/Brave, whichever is installed) in **app mode**
-— a completely chromeless window with no tabs and no address bar — pointed
-at a `waitress`-served local server instead of Flask's dev server. This is
-used instead of embedding a native window via `pywebview`, because
-pywebview's Windows backends depend on `pythonnet`/.NET Framework interop,
-which is a well-documented, inconsistent source of failures once packaged
-with PyInstaller (see [this pywebview issue](https://github.com/r0x0r/pywebview/issues/1215)
-for a taste of how bad it can get — works on one machine, breaks on another,
-breaks after a reboot). App mode gives the same "it's just an app" feel
-using the browser engine Windows already ships with, with none of that
-fragility. **PyInstaller can't cross-compile** — you build the `.exe` by
-running these scripts *on* Windows (or via the included GitHub Actions
-workflow, which builds it for you in the cloud).
-
+app. The app still runs its PDF engine locally with `waitress`, but the UI is
+shown inside a bundled Qt WebEngine window, not Microsoft Edge or a browser tab.
+That makes it feel like normal Windows software: double-click `Proofsheet.exe`,
+use the app window, close the app window when you are done. **PyInstaller can't
+cross-compile** -- you build the `.exe` by running these scripts *on* Windows
+(or via the included GitHub Actions workflow, which builds it for you in the
+cloud).
 Two build tiers, depending on what you want to ship:
 
 **1. Lite (`build_windows_lite.bat`)** — small exe, but the end user's PC
@@ -154,12 +147,3 @@ if the bundle itself failed to package correctly, it silently falls through
 to whatever's already on the system. Check `proofsheet.log` for the "java
 check" line to see which Java is actually being used, and rebuild if the
 bundled one is missing.
-
-If the app opens a regular browser tab instead of its own chromeless window,
-check `proofsheet.log` for "Could not open a chromeless app window" — that
-means no Edge/Chrome/Brave install could be found on that PC at all (rare on
-Windows 10/11, since Edge is a system component), and it fell back
-automatically so the app still works either way.
-
-
-

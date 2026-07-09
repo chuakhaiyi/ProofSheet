@@ -33,7 +33,14 @@ echo.
 echo === Building Proofsheet.exe (windowed desktop app) ===
 pyinstaller --noconfirm --clean --onedir --name Proofsheet ^
   --add-data "templates;templates" ^
+  --add-data "assets;assets" ^
+  --icon "assets\app_icon.ico" ^
   --collect-data opendataloader_pdf ^
+  --hidden-import PySide6.QtWebEngineWidgets ^
+  --hidden-import PySide6.QtWebEngineCore ^
+  --exclude-module PyQt5 ^
+  --exclude-module PyQt6 ^
+  --exclude-module PySide2 ^
   --hidden-import waitress ^
   --windowed ^
   launcher.py

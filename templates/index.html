@@ -225,6 +225,17 @@
     text-align:center; font-family:'IBM Plex Mono',monospace; font-size:11px;
     color:var(--ink-soft); margin:-14px 0 18px;
   }
+  .map-empty{
+    background:#fff;
+    border:1px dashed var(--rule);
+    border-radius:3px;
+    padding:18px;
+    color:var(--ink-soft);
+    font-family:'IBM Plex Mono',monospace;
+    font-size:12px;
+    line-height:1.6;
+  }
+  .map-empty b{color:var(--ink);}
 
   /* tabs */
   .tabs{display:flex; gap:4px;}
@@ -504,17 +515,31 @@ function renderResults(data){
   viewer.innerHTML = '';
   const pageSizes = data.page_sizes || {};
   const thumbs = data.thumbnails || [];
-  document.getElementById('pageCount').textContent = thumbs.length + (thumbs.length===1 ? ' page' : ' pages');
+  const totalPages = data.structure?.['number of pages'] ?? Object.keys(pageSizes).length ?? thumbs.length;
+  const pageCountText = thumbs.length
+    ? `${thumbs.length} of ${totalPages} pages`
+    : `${totalPages || 0} pages`;
+  document.getElementById('pageCount').textContent = pageCountText;
 
   // group elements by page
   const byPage = {};
+  const typeCounts = {};
   (data.structure && data.structure.kids ? data.structure.kids : []).forEach(el=>{
     const p = el['page number'] || 1;
     byPage[p] = byPage[p] || [];
     byPage[p].push(el);
+    const type = el.type || 'other';
+    typeCounts[type] = (typeCounts[type]||0)+1;
   });
 
-  const typeCounts = {};
+  if(thumbs.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'map-empty';
+    empty.innerHTML = '<b>No page image rendered.</b><br>' +
+      'The text and JSON were produced, but the page thumbnail renderer did not create PNG pages.' +
+      (data.thumbnail_error ? '<br><br>' + escapeHtml(data.thumbnail_error) : '');
+    viewer.appendChild(empty);
+  }
 
   thumbs.forEach((thumbPath, idx)=>{
     const pageNum = idx + 1;
@@ -555,8 +580,6 @@ function renderResults(data){
         box.appendChild(tag);
 
         stage.appendChild(box);
-
-        typeCounts[el.type] = (typeCounts[el.type]||0)+1;
       });
     });
 
@@ -568,8 +591,8 @@ function renderResults(data){
   });
 
   const strip = document.getElementById('statStrip');
-  const total = Object.values(typeCounts).reduce((a,b)=>a+b,0);
-  strip.innerHTML = '<span><b>'+ (data.structure?.['number of pages'] ?? thumbs.length) +'</b> pages</span>' +
+  strip.innerHTML = '<span><b>'+ totalPages +'</b> pages</span>' +
+    '<span><b>'+ thumbs.length +'</b> rendered</span>' +
     Object.entries(typeCounts).map(([t,c])=>'<span><b>'+c+'</b> '+t+'</span>').join('');
 }
 
